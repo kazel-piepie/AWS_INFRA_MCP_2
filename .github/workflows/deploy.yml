@@ -1,0 +1,83 @@
+name: Deploy MCP Server
+
+on:
+  push:
+    branches:
+      - develop
+      - staging
+      - prod
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.env.outputs.environment }}
+    steps:
+      - name: Determine environment
+        id: env
+        run: |
+          if [[ "${{ github.ref_name }}" == "develop" ]]; then
+            echo "environment=develop" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.ref_name }}" == "staging" ]]; then
+            echo "environment=staging" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.ref_name }}" == "prod" ]]; then
+            echo "environment=prod" >> "$GITHUB_OUTPUT"
+          fi
+
+  docker:
+    needs: setup
+    runs-on: ubuntu-latest
+    environment: ${{ needs.setup.outputs.environment }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Get ECR URL from Secrets Manager
+        id: get_ecr
+        run: |
+          ECR_URL=$(aws secretsmanager get-secret-value \
+            --secret-id "ai/mcp/${{ needs.setup.outputs.environment }}" \
+            --query SecretString --output text | jq -r '.ecr_repository_url')
+          echo "ecr_url=$ECR_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image
+        working-directory: mcp-server
+        run: |
+          ECR_URL="${{ steps.get_ecr.outputs.ecr_url }}"
+          IMAGE_TAG="${{ github.sha }}"
+
+          docker build -t "$ECR_URL:$IMAGE_TAG" -t "$ECR_URL:latest" .
+          docker push "$ECR_URL:$IMAGE_TAG"
+          docker push "$ECR_URL:latest"
+
+      - name: Get ECS info from Secrets Manager
+        id: get_ecs
+        run: |
+          SECRET=$(aws secretsmanager get-secret-value \
+            --secret-id "ai/mcp/${{ needs.setup.outputs.environment }}" \
+            --query SecretString --output text)
+          echo "cluster=$(echo $SECRET | jq -r '.ecs_cluster_name')" >> "$GITHUB_OUTPUT"
+          echo "service=$(echo $SECRET | jq -r '.ecs_service_name')" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy to ECS
+        run: |
+          aws ecs update-service \
+            --cluster "${{ steps.get_ecs.outputs.cluster }}" \
+            --service "${{ steps.get_ecs.outputs.service }}" \
+            --force-new-deployment \
+            --no-cli-pager
+
+          aws ecs wait services-stable \
+            --cluster "${{ steps.get_ecs.outputs.cluster }}" \
+            --services "${{ steps.get_ecs.outputs.service }}" \
+            --no-cli-pager

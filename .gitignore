@@ -1,0 +1,12 @@
+.env
+node_modules/
+dist/
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+mcp-server/node_modules/
+mcp-server/dist/
+mcp-server/infra/.terraform/
+mcp-server/infra/*.tfstate
+mcp-server/infra/*.tfstate.*
