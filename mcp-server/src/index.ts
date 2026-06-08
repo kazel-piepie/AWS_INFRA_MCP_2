@@ -1,3 +1,4 @@
+import cors from 'cors';
 import express from 'express';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -5,6 +6,13 @@ import { z } from 'zod';
 import { restoreCredentials, startCredentialSync } from './credential-sync';
 import { createRorrInfra } from './tools/create-rorr-infra';
 import { getInfraStatus } from './tools/get-infra-status';
+
+const CORS_ORIGINS = [
+  'https://claude.ai',
+  'https://app.claude.ai',
+  'https://chatgpt.com',
+  'https://chat.openai.com',
+];
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
 
@@ -56,6 +64,13 @@ async function main(): Promise<void> {
   startCredentialSync();
 
   const app = express();
+  app.use(cors({
+    origin: CORS_ORIGINS,
+    allowedHeaders: ['Content-Type', 'mcp-session-id', 'Accept', 'Authorization'],
+    exposedHeaders: ['mcp-session-id'],
+    methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+    credentials: true,
+  }));
   app.use(express.json());
 
   app.get('/health', (_req, res) => {
