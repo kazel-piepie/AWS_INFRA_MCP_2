@@ -77,7 +77,24 @@ jobs:
             --force-new-deployment \
             --no-cli-pager
 
-          aws ecs wait services-stable \
-            --cluster "${{ steps.get_ecs.outputs.cluster }}" \
-            --services "${{ steps.get_ecs.outputs.service }}" \
-            --no-cli-pager
+          echo "Waiting for service to stabilize (up to 20 min)..."
+          CLUSTER="${{ steps.get_ecs.outputs.cluster }}"
+          SERVICE="${{ steps.get_ecs.outputs.service }}"
+          for i in $(seq 1 80); do
+            RUNNING=$(aws ecs describe-services \
+              --cluster "$CLUSTER" --services "$SERVICE" \
+              --query "services[0].runningCount" --output text --no-cli-pager)
+            DESIRED=$(aws ecs describe-services \
+              --cluster "$CLUSTER" --services "$SERVICE" \
+              --query "services[0].desiredCount" --output text --no-cli-pager)
+            DEPLOYMENTS=$(aws ecs describe-services \
+              --cluster "$CLUSTER" --services "$SERVICE" \
+              --query "length(services[0].deployments)" --output text --no-cli-pager)
+            echo "  attempt $i/80: running=$RUNNING desired=$DESIRED deployments=$DEPLOYMENTS"
+            if [ "$RUNNING" = "$DESIRED" ] && [ "$DEPLOYMENTS" = "1" ]; then
+              echo "Service is stable."
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "Timed out waiting for service to stabilize." && exit 1
