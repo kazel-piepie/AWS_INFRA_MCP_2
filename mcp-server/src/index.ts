@@ -3,7 +3,7 @@ import express from 'express';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
-import { restoreCredentials, startCredentialSync } from './credential-sync';
+import { restoreCredentials, startCredentialSync, startCredentialPull } from './credential-sync';
 import { createRorrInfra } from './tools/create-rorr-infra';
 import { getInfraStatus } from './tools/get-infra-status';
 
@@ -62,6 +62,7 @@ async function main(): Promise<void> {
 
   await restoreCredentials();
   startCredentialSync();
+  startCredentialPull();
 
   const app = express();
   app.use(cors({
