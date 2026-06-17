@@ -1,7 +1,10 @@
 import { spawn } from 'child_process';
-import { restoreCredentials } from './credential-sync';
+import { restoreFromSecret, notifyClaudeSuccess } from './credential-sync';
 
 const TIMEOUT_MS = 3_900_000; // 65 minutes — within ALB 4000s hard limit
+
+// Patterns that indicate an OAuth/auth failure in Claude's stderr output
+const AUTH_ERROR_PATTERNS = ['401', 'authentication', 'unauthorized', 'oauth', 'token', 'login'];
 
 export interface RunClaudeOptions {
   prompt: string;
@@ -9,23 +12,12 @@ export interface RunClaudeOptions {
   env?: NodeJS.ProcessEnv;
 }
 
-export async function runClaude(opts: RunClaudeOptions): Promise<string> {
-  try {
-    return await runClaudeOnce(opts);
-  } catch (err: unknown) {
-    const error = err as Error;
-    // Empty stderr on code 1 indicates auth expiry — restore credentials and retry once
-    const isEmptyStderrCode1 = /exited with code 1: \s*$/.test(error.message ?? '');
-    if (isEmptyStderrCode1) {
-      console.log('[claude-runner] Exit code 1 with empty stderr — attempting credential refresh and retry');
-      await restoreCredentials();
-      return runClaudeOnce(opts);
-    }
-    throw err;
-  }
+function isAuthError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return AUTH_ERROR_PATTERNS.some(p => lower.includes(p));
 }
 
-async function runClaudeOnce(opts: RunClaudeOptions): Promise<string> {
+async function _runClaude(opts: RunClaudeOptions): Promise<string> {
   return new Promise((resolve, reject) => {
     const args = [
       '-p', opts.prompt,
@@ -69,4 +61,25 @@ async function runClaudeOnce(opts: RunClaudeOptions): Promise<string> {
       reject(err);
     });
   });
+}
+
+export async function runClaude(opts: RunClaudeOptions): Promise<string> {
+  try {
+    const result = await _runClaude(opts);
+    notifyClaudeSuccess();
+    return result;
+  } catch (err: any) {
+    const msg: string = err.message ?? '';
+    if (isAuthError(msg)) {
+      console.log('[claude-runner] Auth error detected, refreshing credentials from Secrets Manager...');
+      const restored = await restoreFromSecret();
+      if (restored) {
+        console.log('[claude-runner] Retrying with refreshed credentials...');
+        const result = await _runClaude(opts);
+        notifyClaudeSuccess();
+        return result;
+      }
+    }
+    throw err;
+  }
 }
