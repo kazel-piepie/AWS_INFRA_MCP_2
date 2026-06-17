@@ -44,7 +44,7 @@ jobs:
         run: |
           ECR_URL=$(aws secretsmanager get-secret-value \
             --secret-id "ai/mcp/${{ needs.setup.outputs.environment }}" \
-            --query SecretString --output text | jq -r '.ecr_repository_url')
+            --query SecretString --output text | jq -r '.ecr_repository_infra_url')
           echo "ecr_url=$ECR_URL" >> "$GITHUB_OUTPUT"
 
       - name: Login to Amazon ECR
@@ -67,7 +67,7 @@ jobs:
             --secret-id "ai/mcp/${{ needs.setup.outputs.environment }}" \
             --query SecretString --output text)
           echo "cluster=$(echo $SECRET | jq -r '.ecs_cluster_name')" >> "$GITHUB_OUTPUT"
-          echo "service=$(echo $SECRET | jq -r '.ecs_service_name')" >> "$GITHUB_OUTPUT"
+          echo "service=$(echo $SECRET | jq -r '.ecs_service_infra_name')" >> "$GITHUB_OUTPUT"
 
       - name: Deploy to ECS
         run: |
