@@ -9,30 +9,18 @@ const POLL_INTERVAL_MS = 5000;
 let lastModified: number | null = null;
 let lastClaudeSuccess = false;
 
-function isLocalCredentialValid(): boolean {
-  try {
-    const content = fs.readFileSync(CREDENTIALS_PATH, 'utf-8');
-    const creds = JSON.parse(content);
-    const exp = creds?.claudeAiOauth?.expiresAt;
-    return typeof exp === 'number' && exp > Date.now();
-  } catch {
-    return false;
-  }
-}
-
 export async function restoreCredentials(): Promise<void> {
-  // 1. Local credentials exist and are valid — use as-is
-  if (isLocalCredentialValid()) {
+  if (fs.existsSync(CREDENTIALS_PATH)) {
     try {
       lastModified = fs.statSync(CREDENTIALS_PATH).mtimeMs;
     } catch {
       lastModified = null;
     }
-    console.log('[credential-sync] Local credentials are valid, skipping Secrets Manager restore');
+    console.log('[credential-sync] Local credentials found, skipping Secrets Manager restore');
     return;
   }
 
-  // 2. Local missing or expired — pull from Secrets Manager
+  // Credential file missing — pull from Secrets Manager
   await restoreFromSecret();
 }
 
@@ -67,7 +55,7 @@ export function notifyClaudeSuccess(): void {
 export function startCredentialSync(): void {
   setInterval(async () => {
     // Only upload when Claude subprocess has run successfully at least once.
-    // Prevents overwriting Secrets Manager with a stale/expired local token.
+    // This ensures we upload auto-refreshed tokens, not stale ones.
     if (!lastClaudeSuccess) {
       return;
     }
