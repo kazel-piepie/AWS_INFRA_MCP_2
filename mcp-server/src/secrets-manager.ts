@@ -65,9 +65,6 @@ export async function getMcpSecret(): Promise<McpSecret> {
 }
 
 export async function getClaudeSecret(): Promise<ClaudeSecret> {
-  if (process.env.CLAUDE_SECRET_JSON) {
-    return JSON.parse(process.env.CLAUDE_SECRET_JSON) as ClaudeSecret;
-  }
   try {
     return await getSecret(`ai/claude/${env}`) as unknown as ClaudeSecret;
   } catch {
