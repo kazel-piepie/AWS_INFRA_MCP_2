@@ -42,7 +42,7 @@ async function _runClaude(opts: RunClaudeOptions): Promise<string> {
     child.on('close', (code: number | null) => {
       clearTimeout(timer);
       if (code !== 0) {
-        reject(new Error(`Claude exited with code ${code}: ${stderr}`));
+        reject(new Error(`Claude exited with code ${code}: ${stderr || stdout}`));
       } else {
         resolve(stdout);
       }
