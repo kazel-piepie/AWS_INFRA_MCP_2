@@ -19,6 +19,17 @@ resource "aws_security_group" "alb" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # Datacenter MCP listener (ai/mcp/develop external_url_datacenter). This rule
+  # already existed in AWS without a description; declared here to reconcile
+  # drift so Terraform stops proposing to delete it.
+  ingress {
+    description = "Datacenter MCP listener from internet"
+    from_port   = 444
+    to_port     = 444
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   egress {
     description = "Allow all outbound"
     from_port   = 0
